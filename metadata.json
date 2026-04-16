@@ -1,0 +1,9 @@
+{
+  "name": "HealthBridge",
+  "description": "A unified digital health passport for migrant workers, linked with ABHA ID for cross-state medical record portability with offline-first QR access.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

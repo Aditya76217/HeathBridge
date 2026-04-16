@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the HealthBridge app, either a worker or a doctor.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "description": "Email address" },
+        "role": { "type": "string", "enum": ["worker", "doctor", "admin"], "description": "User role" },
+        "abhaId": { "type": "string", "description": "14-digit ABHA ID (for workers)" },
+        "bloodGroup": { "type": "string", "description": "Blood group" },
+        "allergies": { "type": "array", "items": { "type": "string" }, "description": "List of allergies" },
+        "chronicConditions": { "type": "array", "items": { "type": "string" }, "description": "List of chronic conditions" },
+        "recentUpdates": { "type": "array", "items": { "type": "object" }, "description": "Recent health updates" },
+        "aadharNo": { "type": "string", "description": "Aadhar number" },
+        "contactNo": { "type": "string", "description": "Contact number" },
+        "emergencyContactNo": { "type": "string", "description": "Emergency contact number" },
+        "gender": { "type": "string", "description": "Gender" },
+        "dob": { "type": "string", "description": "Date of birth" },
+        "address": { "type": "string", "description": "Address" },
+        "password": { "type": "string", "description": "Legacy password field" }
+      },
+      "required": ["uid", "name", "role", "email"]
+    },
+    "MedicalRecord": {
+      "title": "Medical Record",
+      "description": "A medical record entry for a worker.",
+      "type": "object",
+      "properties": {
+        "workerUid": { "type": "string", "description": "UID of the worker" },
+        "doctorUid": { "type": "string", "description": "UID of the doctor who created the record" },
+        "doctorName": { "type": "string", "description": "Name of the doctor" },
+        "diagnosis": { "type": "string", "description": "Diagnosis details" },
+        "prescription": { "type": "string", "description": "Prescription details" },
+        "date": { "type": "string", "format": "date-time" },
+        "location": { "type": "string", "description": "Location of the clinic/hospital" }
+      },
+      "required": ["workerUid", "doctorUid", "diagnosis", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/records/{recordId}": {
+      "schema": "MedicalRecord",
+      "description": "Medical records"
+    }
+  }
+}

@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - name: string (required, 1-100 chars)
+    //   - email: string (required, valid format)
+    //   - role: string (required, enum: ['worker', 'doctor', 'admin'])
+    //   - abhaId: string (optional, 14 chars)
+    //   - bloodGroup: string (optional, enum)
+    //   - allergies: list (optional, max 20 items, each < 50 chars)
+    //   - isVerified: bool (optional)
+    //   - aadharNo: string (optional, 12 chars)
+    //   - contactNo: string (optional, 10-15 chars)
+    //   - address: string (optional, < 500 chars)
+    //
+    // Collection: records
+    // Document ID: {recordId} (Auto-generated)
+    // Fields:
+    //   - workerUid: string (required, points to a user)
+    //   - doctorUid: string (required, points to a user)
+    //   - doctorName: string (required, < 100 chars)
+    //   - diagnosis: string (required, < 2000 chars)
+    //   - prescription: string (required, < 2000 chars)
+    //   - date: timestamp (required)
+    //   - location: string (optional, < 200 chars)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isDoctor() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().role == 'doctor';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin') ||
+         (request.auth.token.email == "malviyaaditya51@gmail.com") ||
+         (request.auth.token.email == "adityamalviya217@gmail.com"));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isRecent(ts) {
+      return ts is timestamp && 
+             ts <= request.time + duration.value(5, 'm') &&
+             ts >= request.time - duration.value(5, 'm');
+    }
+
+    // Domain Validators
+    function isValidUser(data) {
+      return data.keys().hasOnly(['uid', 'name', 'email', 'role', 'abhaId', 'bloodGroup', 'allergies', 'isVerified', 'aadharNo', 'contactNo', 'address', 'dob', 'emergencyContactNo', 'recentUpdates', 'hospital', 'specialization', 'password', 'chronicConditions']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidEmail(data.email) &&
+             data.role in ['worker', 'doctor', 'admin'] &&
+             (!('abhaId' in data) || (data.abhaId is string && data.abhaId.size() <= 20)) &&
+             (!('bloodGroup' in data) || (data.bloodGroup is string && data.bloodGroup.size() <= 5)) &&
+             (!('allergies' in data) || (data.allergies is list && data.allergies.size() <= 20)) &&
+             (!('isVerified' in data) || data.isVerified is bool);
+    }
+
+    function isValidRecord(data) {
+      return data.keys().hasOnly(['workerUid', 'doctorUid', 'doctorName', 'diagnosis', 'prescription', 'date', 'location']) &&
+             data.workerUid is string &&
+             data.doctorUid == request.auth.uid &&
+             data.doctorName is string && data.doctorName.size() <= 100 &&
+             data.diagnosis is string && data.diagnosis.size() > 0 && data.diagnosis.size() <= 2000 &&
+             data.prescription is string && data.prescription.size() > 0 && data.prescription.size() <= 2000 &&
+             data.date is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /_connection_test_/{docId} {
+      allow read: if true;
+    }
+
+    match /users/{userId} {
+      // Only the owner or an admin can read the full profile (which contains PII like email/address)
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      (request.resource.data.role != 'admin' || isAdmin());
+      
+      allow update: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role &&
+                      request.resource.data.email == resource.data.email &&
+                      (isAdmin() || !('isVerified' in request.resource.data) || request.resource.data.isVerified == resource.data.isVerified);
+      
+      allow delete: if isAdmin();
+    }
+
+    match /records/{recordId} {
+      // Workers can read their own, doctors can read any (to see patient history), admins can read all
+      allow read: if isAuthenticated() && (isOwner(resource.data.workerUid) || isDoctor() || isAdmin());
+      
+      allow create: if isDoctor() && isValidRecord(request.resource.data) && isRecent(request.resource.data.date);
+      
+      allow update: if false; // Records are immutable
+      
+      allow delete: if isAdmin();
+    }
+  }
+}
